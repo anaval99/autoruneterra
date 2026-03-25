@@ -1,0 +1,13 @@
+{
+    "shortcuts": {
+        "capture_key": "ctrl"
+    },
+    "game_window": {
+        "title": "Legends of Runeterra",
+        "x": 0,
+        "y": 0,
+        "width": 1920,
+        "height": 1080
+    },
+    "output_folder": "click_dataset_folder"
+}
