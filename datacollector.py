@@ -81,14 +81,14 @@ def main():
         
     def on_idle():
         current_screenshot = capture_game_screenshot(gw)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        timestamp = int(time.time())
         filename = f"{timestamp}_{1}_{1}.png"
         filepath = output_folder / filename
         print(f"[idle] Captured idle screenshot: {filename}")
         do_save(current_screenshot, filepath)
         
     def do_save(screenshot, filepath):
-        # uncomment later screenshot.save(filepath)
+        screenshot.save(filepath)
         print(f"[saved] {filepath.name}")
 
     def on_click(event):
@@ -114,7 +114,7 @@ def main():
 
         norm_x = normalize_coord(rel_x, gw["width"])
         norm_y = normalize_coord(rel_y, gw["height"])
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        timestamp = int(time.time())
 
         filename = f"{timestamp}_{norm_x}_{norm_y}.png"
         filepath = output_folder / filename
