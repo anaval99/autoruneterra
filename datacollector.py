@@ -41,6 +41,7 @@ def main():
     config = load_config()
     gw = config["game_window"]
     capture_key = config["shortcuts"]["capture_key"]
+    idle_key = config["shortcuts"]["idle_key"]
     output_folder = Path(config["output_folder"])
     output_folder.mkdir(exist_ok=True)
 
@@ -62,6 +63,18 @@ def main():
         screenshot_in_memory = capture_game_screenshot(gw)
         clickcapture_mode = True
         print("[capture] Screenshot stored. Click-capture mode ON.")
+        
+    def on_idle():
+        current_screenshot = capture_game_screenshot(gw)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"{timestamp}_{1}_{1}.png"
+        filepath = output_folder / filename
+        print(f"[idle] Captured idle screenshot: {filename}")
+        do_save(current_screenshot, filepath)
+        
+    def do_save(screenshot, filepath):
+        # uncomment later screenshot.save(filepath)
+        print(f"[saved] {filepath.name}")
 
     def on_click(event):
         nonlocal screenshot_in_memory, clickcapture_mode
@@ -86,7 +99,7 @@ def main():
 
         filename = f"{timestamp}_{norm_x}_{norm_y}.png"
         filepath = output_folder / filename
-        screenshot_in_memory.save(filepath)
+        do_save(screenshot_in_memory, filepath)
 
         print(f"[saved] {filename}  (pixel: {rel_x},{rel_y} -> norm: {norm_x},{norm_y})")
         clickcapture_mode = False
@@ -94,6 +107,7 @@ def main():
         print("[mode] CLICKSAVED — press capture key to take a new screenshot.")
 
     keyboard.on_press_key(capture_key, lambda _: on_capture())
+    keyboard.on_press_key(idle_key, lambda _: on_idle())
     mouse.hook(on_click)
 
     print("Listening for events...")
