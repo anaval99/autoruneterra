@@ -8,12 +8,22 @@ from pathlib import Path
 import keyboard
 import mouse
 import pyautogui
+import pygetwindow
 from PIL import ImageGrab
 
 
 def load_config(path="config.json"):
     with open(path, "r") as f:
         return json.load(f)
+
+
+def find_game_window(title):
+    """Find the game window by title and return its position/size dict."""
+    windows = pygetwindow.getWindowsWithTitle(title)
+    if not windows:
+        return None
+    win = windows[0]
+    return {"x": win.left, "y": win.top, "width": win.width, "height": win.height}
 
 
 def capture_game_screenshot(gw):
@@ -39,11 +49,16 @@ def normalize_coord(value, max_value):
 
 def main():
     config = load_config()
-    gw = config["game_window"]
+    window_title = config["game_window"]["title"]
     capture_key = config["shortcuts"]["capture_key"]
     idle_key = config["shortcuts"]["idle_key"]
     output_folder = Path(config["output_folder"])
     output_folder.mkdir(exist_ok=True)
+
+    gw = find_game_window(window_title)
+    if not gw:
+        print(f"[error] Could not find window: '{window_title}'")
+        return
 
     screenshot_in_memory = None
     clickcapture_mode = False
@@ -84,6 +99,10 @@ def main():
             return
 
         # Get click position relative to game window
+        # sample values for abs_x, abs_y = (600, 400)
+        # sample values for gw x, y = (100, 230)
+        # rel_x = 600 - 100 = 500, where gw[x] is the left edge of the game window
+        # rel_y = 400 - 230 = 170, where gw[y] is the top edge of the game window
         abs_x, abs_y = pyautogui.position()
         rel_x = abs_x - gw["x"]
         rel_y = abs_y - gw["y"]
