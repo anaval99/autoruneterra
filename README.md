@@ -8,6 +8,12 @@ Educational data collection tool for clicker game automation research.
 pip install -r requirements.txt
 ```
 
+## Game Settings
+
+Before using the tool, set **Click UI** to **Click to Action** in the game's Options menu under General:
+
+![Enable Click to Action](readme_assets/enable_click_to_action.png)
+
 ## Usage
 
 1. Configure `config.json` with your game window position/size and key shortcuts.
