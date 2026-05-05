@@ -4,6 +4,8 @@ Educational data collection tool for clicker game automation research.
 
 ## Setup
 
+PyTorch is required but not included in `requirements.txt` since installation varies by system. Install it first by following the [official guide](https://pytorch.org/get-started/locally/), then run:
+
 ```
 pip install -r requirements.txt
 ```
