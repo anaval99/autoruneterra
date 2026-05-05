@@ -10,5 +10,9 @@
         "width": 1920,
         "height": 1080
     },
-    "output_folder": "click_dataset_folder"
+    "output_folder": "click_dataset_folder",
+    "output_resolution": {
+        "width": 448,
+        "height": 448
+    }
 }

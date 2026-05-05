@@ -52,6 +52,7 @@ def main():
     window_title = config["game_window"]["title"]
     capture_key = config["shortcuts"]["capture_key"]
     idle_key = config["shortcuts"]["idle_key"]
+    output_res = (config["output_resolution"]["width"], config["output_resolution"]["height"])
     output_folder = Path(config["output_folder"])
     output_folder.mkdir(exist_ok=True)
 
@@ -88,7 +89,7 @@ def main():
         do_save(current_screenshot, filepath)
         
     def do_save(screenshot, filepath):
-        screenshot.save(filepath)
+        screenshot.resize(output_res).save(filepath)
         print(f"[saved] {filepath.name}")
 
     def on_click(event):
