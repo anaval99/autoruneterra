@@ -82,7 +82,7 @@ def main():
     def on_idle():
         current_screenshot = capture_game_screenshot(gw)
         timestamp = int(time.time())
-        filename = f"{timestamp}_{1}_{1}.png"
+        filename = f"{timestamp}_{1}_{1}_{1}.png"
         filepath = output_folder / filename
         print(f"[idle] Captured idle screenshot: {filename}")
         do_save(current_screenshot, filepath)
@@ -116,7 +116,7 @@ def main():
         norm_y = normalize_coord(rel_y, gw["height"])
         timestamp = int(time.time())
 
-        filename = f"{timestamp}_{norm_x}_{norm_y}.png"
+        filename = f"{timestamp}_{norm_x}_{norm_y}_{0}.png"
         filepath = output_folder / filename
         do_save(screenshot_in_memory, filepath)
 

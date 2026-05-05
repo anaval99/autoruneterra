@@ -22,4 +22,4 @@ Before using the tool, set **Click UI** to **Click to Action** in the game's Opt
 4. Click on the game — the screenshot is saved with normalized click coordinates.
 5. Press `esc` to quit.
 
-Saved files go to `click_dataset_folder/` as `{timestamp}_{x}_{y}.png` where x,y are 0-100 normalized positions.
+Saved files go to `click_dataset_folder/` as `{timestamp}_{x}_{y}_{is_idle}.png` where x,y are 0-100 normalized positions and is_idle is 1 for idle screenshots or 0 for click-captured screenshots.
