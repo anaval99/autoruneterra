@@ -1,7 +1,6 @@
 {
     "shortcuts": {
-        "capture_key": "shift",
-        "idle_key": "alt"
+        "capture_key": "shift"
     },
     "game_window": {
         "title": "Legends of Runeterra",
