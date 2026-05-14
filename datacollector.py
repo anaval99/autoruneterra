@@ -51,6 +51,7 @@ def main():
     config = load_config()
     window_title = config["game_window"]["title"]
     capture_key = config["shortcuts"]["capture_key"]
+    virtual_click_key = config["shortcuts"]["virtual_click_key"]
     output_res = (config["output_resolution"]["width"], config["output_resolution"]["height"])
     output_folder = Path(config["output_folder"])
     output_folder.mkdir(exist_ok=True)
@@ -82,6 +83,29 @@ def main():
     def do_save(screenshot, filepath):
         screenshot.resize(output_res).save(filepath)
         print(f"[saved] {filepath.name}")
+
+    def on_virtualclick():
+        if not clickcapture_mode or screenshot_in_memory is None:
+            print("[virtual] No screenshot in memory — press capture key first.")
+            return
+
+        abs_x, abs_y = pyautogui.position()
+        rel_x = abs_x - gw["x"]
+        rel_y = abs_y - gw["y"]
+
+        if rel_x < 0 or rel_y < 0 or rel_x > gw["width"] or rel_y > gw["height"]:
+            print("[virtual] Mouse outside game window, ignored.")
+            return
+
+        norm_x = normalize_coord(rel_x, gw["width"])
+        norm_y = normalize_coord(rel_y, gw["height"])
+        timestamp = int(time.time())
+
+        filename = f"{timestamp}_{norm_x}_{norm_y}.png"
+        filepath = output_folder / filename
+        do_save(screenshot_in_memory, filepath)
+
+        print(f"[virtual] {filename}  (pixel: {rel_x},{rel_y} -> norm: {norm_x},{norm_y})")
 
     def on_click(event):
         nonlocal screenshot_in_memory, clickcapture_mode
@@ -118,6 +142,7 @@ def main():
         print("[mode] CLICKSAVED — press capture key to take a new screenshot.")
 
     keyboard.on_press_key(capture_key, lambda _: on_capture())
+    keyboard.on_press_key(virtual_click_key, lambda _: on_virtualclick())
     mouse.hook(on_click)
 
     print("Listening for events...")
