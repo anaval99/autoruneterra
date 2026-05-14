@@ -7,6 +7,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.models import ResNet50_Weights, resnet50
+from tqdm import tqdm
 
 #####  load data  ################################################################
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -82,7 +83,8 @@ def train_model(model, train_loader, val_loader, device, epochs=10, lr=1e-4, sav
         # --- train ---
         model.train()
         train_loss = 0.0
-        for images, targets in train_loader:
+        pbar = tqdm(train_loader, desc=f"epoch {epoch:>2}/{epochs}", leave=False)
+        for images, targets in pbar:
             images = images.to(device)
             targets = targets.to(device)
 
@@ -94,13 +96,14 @@ def train_model(model, train_loader, val_loader, device, epochs=10, lr=1e-4, sav
             optimizer.step()
 
             train_loss += loss.item() * images.size(0)
+            pbar.set_postfix(loss=f"{loss.item():.4f}")
         train_loss /= len(train_loader.dataset)
 
         # --- validate ---
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for images, targets in val_loader:
+            for images, targets in tqdm(val_loader, desc="  validating", leave=False):
                 images = images.to(device)
                 targets = targets.to(device)
                 preds = model(images)

@@ -3,3 +3,4 @@ mouse
 pyautogui
 pygetwindow
 Pillow
+tqdm
