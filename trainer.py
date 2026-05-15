@@ -36,7 +36,7 @@ class ClickDataset(Dataset):
         return image, target
 
 
-def build_loaders(folder, batch_size=32, val_frac=0.1, seed=42, num_workers=0):
+def build_loaders(folder, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
     files = sorted(Path(folder).glob("*.png"))
     rng = random.Random(seed)
     rng.shuffle(files)
