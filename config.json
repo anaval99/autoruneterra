@@ -10,6 +10,7 @@
         "width": 1920,
         "height": 1080
     },
+    "model_name": "teemo",
     "output_folder": "click_dataset_folder",
     "output_resolution": {
         "width": 448,

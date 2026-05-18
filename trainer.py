@@ -9,6 +9,8 @@ from torchvision import transforms
 from torchvision.models import ResNet50_Weights, resnet50
 from tqdm import tqdm
 
+from datacollector import load_config
+
 #####  load data  ################################################################
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -74,7 +76,7 @@ def build_model():
 
 
 #####  train model  ################################################################
-def train_model(model, train_loader, val_loader, device, epochs=10, lr=1e-4, save_path="teemo.pt"):
+def train_model(model, train_loader, val_loader, device, save_path, epochs=10, lr=1e-4):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
     best_val_loss = float("inf")
@@ -128,4 +130,5 @@ if __name__ == "__main__":
     print(f"train batches: {len(train_loader)}  val batches: {len(val_loader)}")
 
     model = build_model().to(device)
-    train_model(model, train_loader, val_loader, device, epochs=10)
+    save_path = f"{load_config()['model_name']}.pt"
+    train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=10)

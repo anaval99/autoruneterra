@@ -11,7 +11,6 @@ from tester import load_teemo
 from trainer import IMAGENET_MEAN, IMAGENET_STD
 
 INPUT_SIZE = (448, 448)
-WEIGHTS_PATH = "teemo.pt"
 
 
 _transform = transforms.Compose(
@@ -56,6 +55,7 @@ def run_one_cycle(model, device, gw):
 def main():
     config = load_config()
     window_title = config["game_window"]["title"]
+    weights_path = f"{config['model_name']}.pt"
 
     gw = find_game_window(window_title)
     if not gw:
@@ -64,8 +64,8 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[player] device: {device}")
-    print(f"[player] loading model from {WEIGHTS_PATH}...")
-    model = load_teemo(WEIGHTS_PATH, device)
+    print(f"[player] loading model from {weights_path}...")
+    model = load_teemo(weights_path, device)
     print(f"[player] model loaded.")
     print(f"[player] game window: {gw['width']}x{gw['height']} at ({gw['x']},{gw['y']})")
 

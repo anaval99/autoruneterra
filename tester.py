@@ -5,6 +5,7 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
+from datacollector import load_config
 from trainer import IMAGENET_MEAN, IMAGENET_STD, build_model
 
 
@@ -60,7 +61,8 @@ if __name__ == "__main__":
         image_path = Path(args.folder) / f"{args.name}.png"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = load_teemo("teemo.pt", device)
+    weights_path = f"{load_config()['model_name']}.pt"
+    model = load_teemo(weights_path, device)
 
     pred_x, pred_y = predict(model, image_path, device)
 
