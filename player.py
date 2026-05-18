@@ -32,22 +32,31 @@ def infer(model, pil_image, device):
 
 cycle_interval = 0.5
 
+def normcoord_to_pixel(norm_x, norm_y, gw):
+    pixel_x = round(norm_x * gw["width"])
+    pixel_y = round(norm_y * gw["height"])
+    return pixel_x, pixel_y
+
 def run_one_cycle(model, device, gw):
     time.sleep(cycle_interval)  # to avoid too fast clicking, adjust as needed
 
     pyautogui.moveTo(gw["x"] + 1, gw["y"] + 1)
-    time.sleep(0.2)  # small delay to ensure mouse move is registered and any hover effects are cleared
+    time.sleep(cycle_interval)  # small delay to ensure mouse move is registered and any hover effects are cleared
 
     screenshot = capture_game_screenshot(gw)
     screenshot = screenshot.resize(INPUT_SIZE)
+    time.sleep(cycle_interval)  # small delay to ensure screenshot is captured properly
+    
+    # move to 50,99 before to expand card hover area
+    # card_area_x, card_area_y = normcoord_to_pixel(0.5, 0.97, gw)
+    # pyautogui.moveTo(gw["x"] + card_area_x, gw["y"] + card_area_y)
+    #no need for delay here since we will wait after the click anyway
 
     pred_x, pred_y = infer(model, screenshot, device)
-
-    click_x = gw["x"] + round(pred_x * gw["width"])
-    click_y = gw["y"] + round(pred_y * gw["height"])
+    click_x, click_y = normcoord_to_pixel(pred_x, pred_y, gw)
     pyautogui.moveTo(click_x, click_y)
 
-    time.sleep(0.1)  # small delay before clicking to ensure mouse move is registered
+    time.sleep(cycle_interval)  # small delay before clicking to ensure mouse move is registered
     pyautogui.click()
 
     print(f"[player] pred=({pred_x:.3f},{pred_y:.3f}) click=({click_x},{click_y})")
