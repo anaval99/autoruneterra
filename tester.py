@@ -43,9 +43,21 @@ if __name__ == "__main__":
         default="click_dataset_folder",
         help="folder containing the .png file",
     )
+    parser.add_argument(
+        "--recent",
+        action="store_true",
+        help="use the most recently modified .png in --folder (overrides --name)",
+    )
     args = parser.parse_args()
 
-    image_path = Path(args.folder) / f"{args.name}.png"
+    if args.recent:
+        folder = Path(args.folder)
+        files = list(folder.glob("*.png"))
+        if not files:
+            raise SystemExit(f"no .png files found in {folder}")
+        image_path = max(files, key=lambda p: p.stat().st_mtime)
+    else:
+        image_path = Path(args.folder) / f"{args.name}.png"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = load_teemo("teemo.pt", device)
