@@ -30,12 +30,13 @@ def infer(model, pil_image, device):
     pred_y = max(0.0, min(1.0, pred_y))
     return pred_x, pred_y
 
+cycle_interval = 0.5
 
 def run_one_cycle(model, device, gw):
-    time.sleep(0.5)
+    time.sleep(cycle_interval)  # to avoid too fast clicking, adjust as needed
 
     pyautogui.moveTo(gw["x"] + 1, gw["y"] + 1)
-    time.sleep(0.5)
+    time.sleep(0.2)  # small delay to ensure mouse move is registered and any hover effects are cleared
 
     screenshot = capture_game_screenshot(gw)
     screenshot = screenshot.resize(INPUT_SIZE)
@@ -46,7 +47,7 @@ def run_one_cycle(model, device, gw):
     click_y = gw["y"] + round(pred_y * gw["height"])
     pyautogui.moveTo(click_x, click_y)
 
-    time.sleep(0.5)
+    time.sleep(0.1)  # small delay before clicking to ensure mouse move is registered
     pyautogui.click()
 
     print(f"[player] pred=({pred_x:.3f},{pred_y:.3f}) click=({click_x},{click_y})")
