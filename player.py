@@ -41,7 +41,11 @@ def infer(coord_model, mode_model, pil_image, device):
     pred_x, pred_y = pred.cpu().tolist()
     pred_x = max(0.0, min(1.0, pred_x))
     pred_y = max(0.0, min(1.0, pred_y))
-    return pred_x, pred_y, MODES[mode_idx]
+    mode = MODES[mode_idx]
+    if mode == "confirmation":
+        # confirmation has a fixed hitbox — skip the regressor and aim at a known point inside
+        pred_x, pred_y = 0.85, 0.50
+    return pred_x, pred_y, mode
 
 
 cycle_interval = 0.5
