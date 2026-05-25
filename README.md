@@ -73,3 +73,7 @@ This relocates them to `.unknown/` so they're out of `click_dataset_folder/` but
 ## Known Issues
 
 - **Game must run on the primary monitor.** `PIL.ImageGrab.grab()` defaults to the primary monitor's coordinate space, so a window on a secondary monitor captures as a black image. Either move LoR to the primary display, or change the call in `capture_game_screenshot` to `ImageGrab.grab(bbox, all_screens=True)`.
+
+  To switch primary displays on Windows, open **System → Display**, select the monitor you want as primary, and check **Make this my main display**:
+
+  ![Set primary display](readme_assets/set_primary_display.png)
