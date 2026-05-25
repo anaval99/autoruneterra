@@ -52,6 +52,7 @@ def main():
     window_title = config["game_window"]["title"]
     capture_key = config["shortcuts"]["capture_key"]
     virtual_click_key = config["shortcuts"]["virtual_click_key"]
+    debug_virtual_click_key = config["shortcuts"]["debug_virtual_click_key"]
     output_res = (config["output_resolution"]["width"], config["output_resolution"]["height"])
     output_folder = Path(config["output_folder"])
     output_folder.mkdir(exist_ok=True)
@@ -84,7 +85,7 @@ def main():
         screenshot.resize(output_res).save(filepath)
         print(f"[saved] {filepath.name}")
 
-    def on_virtualclick():
+    def on_virtualclick(is_debug=False):
         if not clickcapture_mode or screenshot_in_memory is None:
             print("[virtual] No screenshot in memory — press capture key first.")
             return
@@ -102,10 +103,12 @@ def main():
         timestamp = int(time.time())
 
         filename = f"{timestamp}_{norm_x}_{norm_y}.png"
-        filepath = output_folder / filename
-        do_save(screenshot_in_memory, filepath)
+        if not is_debug:
+            filepath = output_folder / filename
+            do_save(screenshot_in_memory, filepath)
 
-        print(f"[virtual] {filename}  (pixel: {rel_x},{rel_y} -> norm: {norm_x},{norm_y})")
+        tag = "debug" if is_debug else "virtual"
+        print(f"[{tag}] {filename}  (pixel: {rel_x},{rel_y} -> norm: {norm_x},{norm_y})")
 
     def on_click(event):
         nonlocal screenshot_in_memory, clickcapture_mode
@@ -143,6 +146,7 @@ def main():
 
     keyboard.on_press_key(capture_key, lambda _: on_capture())
     keyboard.on_press_key(virtual_click_key, lambda _: on_virtualclick())
+    keyboard.on_press_key(debug_virtual_click_key, lambda _: on_virtualclick(is_debug=True))
     mouse.hook(on_click)
 
     print("Listening for events...")

@@ -11,15 +11,13 @@ from tqdm import tqdm
 
 from coord_to_mode import MODES, coord_to_mode
 from datacollector import load_config
-
-#####  load data  ################################################################
-IMAGENET_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_STD = [0.229, 0.224, 0.225]
+from trainer import IMAGENET_MEAN, IMAGENET_STD
 
 MODE_TO_INDEX = {mode: i for i, mode in enumerate(MODES)}
 
 
-class ClickDataset(Dataset):
+#####  load data  ################################################################
+class ModeDataset(Dataset):
     def __init__(self, file_paths, transform=None):
         self.file_paths = file_paths
         self.transform = transform
@@ -31,20 +29,13 @@ class ClickDataset(Dataset):
         path = self.file_paths[idx]
         # filename: {timestamp}_{x}_{y}.png where x,y are 0..100
         _, x_str, y_str = path.stem.split("_")
-        x_norm = int(x_str)
-        y_norm = int(y_str)
-        target = torch.tensor(
-            [x_norm / 100.0, y_norm / 100.0], dtype=torch.float32
-        )
-
-        mode = coord_to_mode(x_norm, y_norm)
-        mode_onehot = torch.zeros(len(MODES), dtype=torch.float32)
-        mode_onehot[MODE_TO_INDEX[mode]] = 1.0
+        mode = coord_to_mode(int(x_str), int(y_str))
+        target = torch.tensor(MODE_TO_INDEX[mode], dtype=torch.long)
 
         image = Image.open(path).convert("RGB")
         if self.transform is not None:
             image = self.transform(image)
-        return image, mode_onehot, target
+        return image, target
 
 
 def build_loaders(folder, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
@@ -63,8 +54,8 @@ def build_loaders(folder, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
         ]
     )
 
-    train_ds = ClickDataset(train_files, transform=transform)
-    val_ds = ClickDataset(val_files, transform=transform)
+    train_ds = ModeDataset(train_files, transform=transform)
+    val_ds = ModeDataset(val_files, transform=transform)
 
     train_loader = DataLoader(
         train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers
@@ -76,65 +67,56 @@ def build_loaders(folder, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
 
 
 #####  create model  ################################################################
-class ClickModel(nn.Module):
-    """ResNet-50 backbone + mode one-hot concatenated into the regression head."""
-
-    def __init__(self, num_modes):
-        super().__init__()
-        backbone = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
-        in_features = backbone.fc.in_features
-        backbone.fc = nn.Identity()
-        self.backbone = backbone
-        self.head = nn.Linear(in_features + num_modes, 2)
-
-    def forward(self, image, mode_onehot):
-        feat = self.backbone(image)
-        return self.head(torch.cat([feat, mode_onehot], dim=1))
-
-
-def build_model():
-    return ClickModel(num_modes=len(MODES))
+def build_model(num_classes):
+    model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+    # Swap ResNet-50's 1000-way head for an N-way classifier over MODES.
+    model.fc = nn.Linear(model.fc.in_features, num_classes)
+    return model
 
 
 #####  train model  ################################################################
 def train_model(model, train_loader, val_loader, device, save_path, epochs=10, lr=1e-4):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.MSELoss()
+    criterion = nn.CrossEntropyLoss()
     best_val_loss = float("inf")
 
     for epoch in range(1, epochs + 1):
         # --- train ---
         model.train()
         train_loss = 0.0
+        train_correct = 0
         pbar = tqdm(train_loader, desc=f"epoch {epoch:>2}/{epochs}", leave=False)
-        for images, modes, targets in pbar:
+        for images, targets in pbar:
             images = images.to(device)
-            modes = modes.to(device)
             targets = targets.to(device)
 
-            preds = model(images, modes)
-            loss = criterion(preds, targets)
+            logits = model(images)
+            loss = criterion(logits, targets)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             train_loss += loss.item() * images.size(0)
+            train_correct += (logits.argmax(1) == targets).sum().item()
             pbar.set_postfix(loss=f"{loss.item():.4f}")
         train_loss /= len(train_loader.dataset)
+        train_acc = train_correct / len(train_loader.dataset)
 
         # --- validate ---
         model.eval()
         val_loss = 0.0
+        val_correct = 0
         with torch.no_grad():
-            for images, modes, targets in tqdm(val_loader, desc="  validating", leave=False):
+            for images, targets in tqdm(val_loader, desc="  validating", leave=False):
                 images = images.to(device)
-                modes = modes.to(device)
                 targets = targets.to(device)
-                preds = model(images, modes)
-                loss = criterion(preds, targets)
+                logits = model(images)
+                loss = criterion(logits, targets)
                 val_loss += loss.item() * images.size(0)
+                val_correct += (logits.argmax(1) == targets).sum().item()
         val_loss /= len(val_loader.dataset)
+        val_acc = val_correct / len(val_loader.dataset)
 
         # --- log + save best ---
         marker = ""
@@ -142,7 +124,11 @@ def train_model(model, train_loader, val_loader, device, save_path, epochs=10, l
             best_val_loss = val_loss
             torch.save(model.state_dict(), save_path)
             marker = "  <- saved"
-        print(f"epoch {epoch:>2}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}{marker}")
+        print(
+            f"epoch {epoch:>2}  "
+            f"train_loss={train_loss:.4f} train_acc={train_acc:.3f}  "
+            f"val_loss={val_loss:.4f} val_acc={val_acc:.3f}{marker}"
+        )
 
 
 if __name__ == "__main__":
@@ -152,6 +138,6 @@ if __name__ == "__main__":
     train_loader, val_loader = build_loaders("click_dataset_folder")
     print(f"train batches: {len(train_loader)}  val batches: {len(val_loader)}")
 
-    model = build_model().to(device)
-    save_path = f"{load_config()['model_name']}.pt"
+    model = build_model(num_classes=len(MODES)).to(device)
+    save_path = f"mode_{load_config()['model_name']}.pt"
     train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=10)

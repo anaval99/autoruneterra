@@ -1,3 +1,4 @@
 teemo.pt
 __pycache__/*
 *.pt
+.unknown/*

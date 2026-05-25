@@ -1,7 +1,8 @@
 {
     "shortcuts": {
         "capture_key": "shift",
-        "virtual_click_key": "z"
+        "virtual_click_key": "z",
+        "debug_virtual_click_key": "x"
     },
     "game_window": {
         "title": "Legends of Runeterra",

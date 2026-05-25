@@ -25,3 +25,7 @@ Before using the tool, set **Click UI** to **Click to Action** in the game's Opt
 5. Press `esc` to quit.
 
 Saved files go to `click_dataset_folder/` as `{timestamp}_{x}_{y}.png` where x,y are 0-100 normalized positions.
+
+## Known Issues
+
+- **Game must run on the primary monitor.** `PIL.ImageGrab.grab()` defaults to the primary monitor's coordinate space, so a window on a secondary monitor captures as a black image. Either move LoR to the primary display, or change the call in `capture_game_screenshot` to `ImageGrab.grab(bbox, all_screens=True)`.
