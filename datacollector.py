@@ -46,19 +46,21 @@ def fetch_card_summaries(setlite, timeout=2.0):
         code = rect.get("CardCode")
         card = setlite.get(code)
         if card is None:
-            cost, attack, type_bin = 0, 0, 0
+            name, cost, attack, type_bin = None, 0, 0, 0
         else:
+            name = card.get("name")
             cost = card.get("cost") or 0
             attack = card.get("attack") or 0
             type_bin = 1 if card.get("type") == "Unit" else 0
 
         summaries.append({
             "cardCode": code,
+            "name": name,
             "cost": cost,
             "attack": attack,
             "type": type_bin,
             "topLeftX": (rect.get("TopLeftX") or 0) / sw,
-            "topLeftY": (rect.get("TopLeftY") or 0) / sh,
+            "topLeftY": 1.0 - ((rect.get("TopLeftY") or 0) / sh), # flip Y to match image coordinates
             "width": (rect.get("Width") or 0) / sw,
             "height": (rect.get("Height") or 0) / sh,
             "localPlayer": 1 if rect.get("LocalPlayer") else 0,
