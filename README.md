@@ -10,6 +10,31 @@ PyTorch is required but not included in `requirements.txt` since installation va
 pip install -r requirements.txt
 ```
 
+### LoR client API
+
+The data collector and player both call the LoR client's positional-rectangles endpoint at `http://localhost:21337/positional-rectangles` to read the live card state. This endpoint must be reachable (LoR running with the API enabled) — if it's down, capture and inference cycles abort instead of saving stale data.
+
+### `setlite.json`
+
+`setlite.json` at the repo root is a merged card-metadata dictionary keyed by `cardCode`. It's committed, so you don't need to build it — only regenerate when Riot ships a new set. The runtime reads `cost`, `attack`, and `type` from it to turn the API's card list into model features.
+
+### `config.json`
+
+```json
+{
+    "shortcuts": { "capture_key": "shift", "virtual_click_key": "z", "debug_virtual_click_key": "x" },
+    "game_window": { "title": "Legends of Runeterra", "x": 0, "y": 0, "width": 1920, "height": 1080 },
+    "model_name": "darius",
+    "output_folder": "darius_dataset",
+    "output_resolution": { "width": 200, "height": 500 },
+    "crop_box": { "left": 1564, "top": 290, "right": 1764, "bottom": 796 }
+}
+```
+
+- `crop_box` — region of the captured screenshot that gets saved (and that the model sees at inference). Pick a sub-region that contains the visual signal you care about.
+- `output_resolution` — final size everything gets resized to after cropping. Drives both the saved PNG dimensions and the model's input size.
+- `model_name` — weights are written to `{model_name}.pt` (coord regressor) and `mode_{model_name}.pt` (mode classifier).
+
 ## Game Settings
 
 Before using the tool, set **Click UI** to **Click to Action** in the game's Options menu under General:
@@ -18,20 +43,20 @@ Before using the tool, set **Click UI** to **Click to Action** in the game's Opt
 
 ## Collecting Data
 
-1. Configure `config.json` with your game window position/size and key shortcuts.
-2. Run `python datacollector.py`
-3. Press the capture key (default: `shift`) to screenshot the game and enter click-capture mode.
-4. Click on the game — the screenshot is saved with normalized click coordinates.
+1. Make sure LoR is running and the API is reachable, then run `python datacollector.py`.
+2. Press the capture key (default: `shift`). This moves the cursor out of the way, screenshots the game window, and fetches the current card list from the LoR API. Both are held in memory. If the API call fails the capture is cancelled.
+3. Move the cursor to the point you want to label.
+4. Press the virtual click key (default: `z`) to save the labeled sample. You can press `z` multiple times against the same capture to label several points — press `shift` again to refresh the capture.
 5. Press `esc` to quit.
 
-Saved files go to `click_dataset_folder/` as `{timestamp}_{x}_{y}.png` where x,y are 0-100 normalized positions.
+Each save produces a **pair** in `output_folder/`:
 
-### Virtual and debug clicks
+- `{timestamp}_{x}_{y}.png` — the screenshot cropped to `crop_box` and resized to `output_resolution`. `x` and `y` are the cursor's position in the *game window* normalized to 0–100.
+- `{timestamp}_{x}_{y}.json` — an array of `{cardCode, cost, attack, type}` for every card the API saw at capture time. Cards whose `cardCode` isn't in `setlite.json` (e.g. `"face"`) are skipped.
 
-While in click-capture mode you can also use:
+### Debug clicks
 
-- `virtual_click_key` (default: `z`) — save the current screenshot tagged with the cursor's position without actually clicking the game.
-- `debug_virtual_click_key` (default: `x`) — print the cursor's normalized coords without saving anything. Useful for measuring hitboxes.
+`debug_virtual_click_key` (default: `x`) prints the cursor's normalized coords without saving anything. Useful for measuring hitboxes.
 
 ## Training
 
@@ -47,7 +72,14 @@ python modetrainer.py    # -> mode_{model_name}.pt
 
 Both read `model_name` from `config.json` (e.g. `darius` → `darius.pt`, `mode_darius.pt`).
 
-The regressor takes `(image, mode_onehot)` as input — the ResNet backbone produces a 2048-dim feature, the mode one-hot is concatenated onto it, and the final `Linear(2048 + N_modes, 2)` head outputs `(x, y)`. At inference the mode classifier runs first and its prediction is fed into the regressor, so the coord head focuses on the right region of the screen.
+Both models consume the same two inputs — the cropped screenshot and the sidecar card list — plus, for the regressor, the predicted mode:
+
+- The ResNet-50 backbone turns the image into a 2048-dim feature.
+- A small per-card MLP embeds each card's `[cost/20, attack/30, is_unit]` (where `is_unit` is `1` if `type == "Unit"`, else `0`); a masked sum across cards produces a fixed-size 16-dim "card-set" feature. This is permutation-invariant and handles variable card counts without padding to a fixed length.
+- The **mode classifier** head sees `[image_feat, card_feat]`.
+- The **coord regressor** head sees `[image_feat, card_feat, mode_onehot]` and outputs `(x, y)`.
+
+At inference the mode classifier runs first and its prediction is fed into the regressor, so the coord head focuses on the right region of the screen.
 
 ### Action modes
 
@@ -69,6 +101,22 @@ python remove_unknown.py
 ```
 
 This relocates them to `.unknown/` so they're out of `click_dataset_folder/` but not lost.
+
+## Running
+
+Once both models are trained, `player.py` drives the game:
+
+```
+python player.py
+```
+
+Press `shift` to toggle the loop on/off, `esc` to quit. Each cycle the player:
+
+1. Moves the cursor out of the way to clear hover effects.
+2. Fetches the live card list from the LoR API. If the API is down, the cycle is skipped.
+3. Screenshots the game, crops to `crop_box`, resizes to `output_resolution`.
+4. Runs the mode classifier, then the coord regressor (conditioned on the predicted mode).
+5. Moves the cursor to the predicted point and clicks.
 
 ## Known Issues
 

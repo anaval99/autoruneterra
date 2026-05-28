@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from coord_to_mode import MODES, coord_to_mode
 from datacollector import load_config
-from trainer import IMAGENET_MEAN, IMAGENET_STD
+from trainer import CardEncoder, IMAGENET_MEAN, IMAGENET_STD, pad_cards, parse_card_json
 
 MODE_TO_INDEX = {mode: i for i, mode in enumerate(MODES)}
 
@@ -35,12 +35,21 @@ class ModeDataset(Dataset):
         image = Image.open(path).convert("RGB")
         if self.transform is not None:
             image = self.transform(image)
-        return image, target
+
+        cards = parse_card_json(path.with_suffix(".json"))
+        return image, cards, target
+
+
+def _mode_collate(batch):
+    images = torch.stack([b[0] for b in batch])
+    cards, mask = pad_cards([b[1] for b in batch])
+    targets = torch.stack([b[2] for b in batch])
+    return images, cards, mask, targets
 
 
 def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
     """input_size is (width, height) — matches config.output_resolution."""
-    files = sorted(Path(folder).glob("*.png"))
+    files = [p for p in sorted(Path(folder).glob("*.png")) if p.with_suffix(".json").exists()]
     rng = random.Random(seed)
     rng.shuffle(files)
 
@@ -60,20 +69,37 @@ def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_
     val_ds = ModeDataset(val_files, transform=transform)
 
     train_loader = DataLoader(
-        train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+        collate_fn=_mode_collate,
     )
     val_loader = DataLoader(
-        val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers
+        val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
+        collate_fn=_mode_collate,
     )
     return train_loader, val_loader
 
 
 #####  create model  ################################################################
+class ModeModel(nn.Module):
+    """ResNet-50 image features + card-set features -> mode logits."""
+
+    def __init__(self, num_classes):
+        super().__init__()
+        backbone = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        in_features = backbone.fc.in_features
+        backbone.fc = nn.Identity()
+        self.backbone = backbone
+        self.card_encoder = CardEncoder()
+        self.head = nn.Linear(in_features + self.card_encoder.out_dim, num_classes)
+
+    def forward(self, image, cards, card_mask):
+        img_feat = self.backbone(image)
+        card_feat = self.card_encoder(cards, card_mask)
+        return self.head(torch.cat([img_feat, card_feat], dim=1))
+
+
 def build_model(num_classes):
-    model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
-    # Swap ResNet-50's 1000-way head for an N-way classifier over MODES.
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
-    return model
+    return ModeModel(num_classes=num_classes)
 
 
 #####  train model  ################################################################
@@ -88,11 +114,13 @@ def train_model(model, train_loader, val_loader, device, save_path, epochs=10, l
         train_loss = 0.0
         train_correct = 0
         pbar = tqdm(train_loader, desc=f"epoch {epoch:>2}/{epochs}", leave=False)
-        for images, targets in pbar:
+        for images, cards, card_mask, targets in pbar:
             images = images.to(device)
+            cards = cards.to(device)
+            card_mask = card_mask.to(device)
             targets = targets.to(device)
 
-            logits = model(images)
+            logits = model(images, cards, card_mask)
             loss = criterion(logits, targets)
 
             optimizer.zero_grad()
@@ -110,10 +138,12 @@ def train_model(model, train_loader, val_loader, device, save_path, epochs=10, l
         val_loss = 0.0
         val_correct = 0
         with torch.no_grad():
-            for images, targets in tqdm(val_loader, desc="  validating", leave=False):
+            for images, cards, card_mask, targets in tqdm(val_loader, desc="  validating", leave=False):
                 images = images.to(device)
+                cards = cards.to(device)
+                card_mask = card_mask.to(device)
                 targets = targets.to(device)
-                logits = model(images)
+                logits = model(images, cards, card_mask)
                 loss = criterion(logits, targets)
                 val_loss += loss.item() * images.size(0)
                 val_correct += (logits.argmax(1) == targets).sum().item()

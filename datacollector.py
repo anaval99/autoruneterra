@@ -98,6 +98,7 @@ def main():
         return
 
     screenshot_in_memory = None
+    summaries_in_memory = None
     clickcapture_mode = False
 
     print(f"Data Collector started.")
@@ -108,13 +109,20 @@ def main():
     print("Press 'esc' to quit.\n")
 
     def on_capture():
-        nonlocal screenshot_in_memory, clickcapture_mode
+        nonlocal screenshot_in_memory, summaries_in_memory, clickcapture_mode
         # Move mouse to top-left corner (1,1) to clear any hover effects
         pyautogui.moveTo(gw["x"] + 1, gw["y"] + 1)
-        time.sleep(0.5)
-        screenshot_in_memory = capture_game_screenshot(gw)
+        try:
+            summaries = fetch_card_summaries(setlite)
+        except Exception as e:
+            print(f"[abort] Failed to fetch game data, capture cancelled: {e}")
+            return
+        summaries_in_memory = summaries
+
+        screenshot = capture_game_screenshot(gw)
+        screenshot_in_memory = screenshot
         clickcapture_mode = True
-        print("[capture] Screenshot stored. Click-capture mode ON.")
+        print(f"[capture] Screenshot + {len(summaries)} cards stored. Click-capture mode ON.")
 
     def do_save(screenshot, filepath):
         screenshot.crop(crop_box).resize(output_res).save(filepath)
@@ -140,16 +148,10 @@ def main():
         filename = f"{timestamp}_{norm_x}_{norm_y}.png"
         if not is_debug:
             stem = f"{timestamp}_{norm_x}_{norm_y}"
-            try:
-                summaries = fetch_card_summaries(setlite)
-            except Exception as e:
-                print(f"[abort] Failed to fetch game data, image not saved: {e}")
-                return
-
             json_path = output_folder / f"{stem}.json"
             with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(summaries, f, indent=2)
-            print(f"[saved] {json_path.name}  ({len(summaries)} cards)")
+                json.dump(summaries_in_memory, f, indent=2)
+            print(f"[saved] {json_path.name}  ({len(summaries_in_memory)} cards)")
 
             filepath = output_folder / filename
             do_save(screenshot_in_memory, filepath)

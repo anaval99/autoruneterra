@@ -8,9 +8,20 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 from coord_to_mode import MODES
-from datacollector import capture_game_screenshot, find_game_window, load_config
+from datacollector import (
+    capture_game_screenshot,
+    fetch_card_summaries,
+    find_game_window,
+    load_config,
+    load_setlite,
+)
 from modetrainer import build_model as build_mode_model
-from trainer import IMAGENET_MEAN, IMAGENET_STD, build_model as build_coord_model
+from trainer import (
+    IMAGENET_MEAN,
+    IMAGENET_STD,
+    build_model as build_coord_model,
+    summaries_to_tensor,
+)
 
 
 _transform = transforms.Compose(
@@ -28,14 +39,20 @@ def load_weights(model, weights_path, device):
     return model
 
 
-def infer(coord_model, mode_model, pil_image, device):
+def infer(coord_model, mode_model, pil_image, summaries, device):
     tensor = _transform(pil_image.convert("RGB")).unsqueeze(0).to(device)
+    cards = summaries_to_tensor(summaries).unsqueeze(0).to(device)  # (1, N, 3)
+    if cards.shape[1] == 0:
+        cards = torch.zeros((1, 1, cards.shape[2]), device=device)
+        card_mask = torch.zeros((1, 1), device=device)
+    else:
+        card_mask = torch.ones(cards.shape[:2], device=device)
     with torch.no_grad():
-        mode_idx = int(mode_model(tensor).argmax(1).item())
+        mode_idx = int(mode_model(tensor, cards, card_mask).argmax(1).item())
         mode_onehot = F.one_hot(
             torch.tensor([mode_idx], device=device), num_classes=len(MODES)
         ).float()
-        pred = coord_model(tensor, mode_onehot)[0]
+        pred = coord_model(tensor, cards, card_mask, mode_onehot)[0]
     pred_x, pred_y = pred.cpu().tolist()
     pred_x = max(0.0, min(1.0, pred_x))
     pred_y = max(0.0, min(1.0, pred_y))
@@ -59,17 +76,23 @@ def normcoord_to_pixel(norm_x, norm_y, gw):
     return pixel_x, pixel_y
 
 
-def run_one_cycle(coord_model, mode_model, device, gw, input_size, crop_box):
+def run_one_cycle(coord_model, mode_model, device, gw, input_size, crop_box, setlite):
     time.sleep(cycle_interval)  # to avoid too fast clicking, adjust as needed
 
     pyautogui.moveTo(gw["x"] + 1, gw["y"] + 1)
     time.sleep(cycle_interval)  # small delay to ensure mouse move is registered and any hover effects are cleared
 
+    try:
+        summaries = fetch_card_summaries(setlite)
+    except Exception as e:
+        print(f"[player] skip cycle: failed to fetch game data: {e}")
+        return
+
     screenshot = capture_game_screenshot(gw)
     screenshot = screenshot.crop(crop_box).resize(input_size)
     time.sleep(cycle_interval)  # small delay to ensure screenshot is captured properly
 
-    pred_x, pred_y, mode = infer(coord_model, mode_model, screenshot, device)
+    pred_x, pred_y, mode = infer(coord_model, mode_model, screenshot, summaries, device)
     click_x, click_y = normcoord_to_pixel(pred_x, pred_y, gw)
     pyautogui.moveTo(click_x, click_y)
 
@@ -90,6 +113,7 @@ def main():
     input_size = (config["output_resolution"]["width"], config["output_resolution"]["height"])
     cb = config["crop_box"]
     crop_box = (cb["left"], cb["top"], cb["right"], cb["bottom"])
+    setlite = load_setlite()
 
     gw = find_game_window(window_title)
     if not gw:
@@ -128,7 +152,7 @@ def main():
 
     while not stop.is_set():
         if running.is_set():
-            run_one_cycle(coord_model, mode_model, device, gw, input_size, crop_box)
+            run_one_cycle(coord_model, mode_model, device, gw, input_size, crop_box, setlite)
         else:
             time.sleep(0.05)
 
