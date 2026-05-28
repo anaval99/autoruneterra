@@ -106,7 +106,6 @@ def build_model(num_classes):
 def train_model(model, train_loader, val_loader, device, save_path, epochs=10, lr=1e-4):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
-    best_val_loss = float("inf")
 
     for epoch in range(1, epochs + 1):
         # --- train ---
@@ -150,16 +149,12 @@ def train_model(model, train_loader, val_loader, device, save_path, epochs=10, l
         val_loss /= len(val_loader.dataset)
         val_acc = val_correct / len(val_loader.dataset)
 
-        # --- log + save best ---
-        marker = ""
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            torch.save(model.state_dict(), save_path)
-            marker = "  <- saved"
+        # --- log + save ---
+        torch.save(model.state_dict(), save_path)
         print(
             f"epoch {epoch:>2}  "
             f"train_loss={train_loss:.4f} train_acc={train_acc:.3f}  "
-            f"val_loss={val_loss:.4f} val_acc={val_acc:.3f}{marker}"
+            f"val_loss={val_loss:.4f} val_acc={val_acc:.3f}  <- saved"
         )
 
 

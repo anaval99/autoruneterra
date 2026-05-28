@@ -186,7 +186,6 @@ def build_model():
 def train_model(model, train_loader, val_loader, device, save_path, epochs=10, lr=1e-4):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
-    best_val_loss = float("inf")
 
     for epoch in range(1, epochs + 1):
         # --- train ---
@@ -226,13 +225,9 @@ def train_model(model, train_loader, val_loader, device, save_path, epochs=10, l
                 val_loss += loss.item() * images.size(0)
         val_loss /= len(val_loader.dataset)
 
-        # --- log + save best ---
-        marker = ""
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            torch.save(model.state_dict(), save_path)
-            marker = "  <- saved"
-        print(f"epoch {epoch:>2}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}{marker}")
+        # --- log + save ---
+        torch.save(model.state_dict(), save_path)
+        print(f"epoch {epoch:>2}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  <- saved")
 
 
 if __name__ == "__main__":
