@@ -41,7 +41,7 @@ def load_weights(model, weights_path, device):
 
 def infer(coord_model, mode_model, pil_image, summaries, device):
     tensor = _transform(pil_image.convert("RGB")).unsqueeze(0).to(device)
-    cards = summaries_to_tensor(summaries).unsqueeze(0).to(device)  # (1, N, 3)
+    cards = summaries_to_tensor(summaries).unsqueeze(0).to(device)  # (1, N, CARD_FEAT_DIM)
     if cards.shape[1] == 0:
         cards = torch.zeros((1, 1, cards.shape[2]), device=device)
         card_mask = torch.zeros((1, 1), device=device)
