@@ -27,24 +27,41 @@ def load_setlite(path="setlite.json"):
 
 
 def fetch_card_summaries(setlite, timeout=2.0):
-    """Fetch live game state and return a list of {cardCode, cost, attack, type}.
+    """Fetch live game state and return per-rectangle card summaries.
 
-    Cards whose cardCode is not in setlite (e.g. "face") are skipped.
+    Each entry: {cardCode, cost, attack, type, topLeftX, topLeftY, width, height, localPlayer}.
+    Positions/sizes are normalized by the API's reported screen dimensions.
+    Unrecognized card codes (e.g. "face" for the nexus) keep their spatial info
+    but get cost=0, attack=0, type=0 so they stay in the dataset as click targets.
     """
     with urllib.request.urlopen(GAME_DATA_URL, timeout=timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
+
+    screen = data.get("Screen", {}) or {}
+    sw = float(screen.get("ScreenWidth") or 1920)
+    sh = float(screen.get("ScreenHeight") or 1080)
 
     summaries = []
     for rect in data.get("Rectangles", []):
         code = rect.get("CardCode")
         card = setlite.get(code)
         if card is None:
-            continue
+            cost, attack, type_bin = 0, 0, 0
+        else:
+            cost = card.get("cost") or 0
+            attack = card.get("attack") or 0
+            type_bin = 1 if card.get("type") == "Unit" else 0
+
         summaries.append({
             "cardCode": code,
-            "cost": card.get("cost"),
-            "attack": card.get("attack"),
-            "type": card.get("type"),
+            "cost": cost,
+            "attack": attack,
+            "type": type_bin,
+            "topLeftX": (rect.get("TopLeftX") or 0) / sw,
+            "topLeftY": (rect.get("TopLeftY") or 0) / sh,
+            "width": (rect.get("Width") or 0) / sw,
+            "height": (rect.get("Height") or 0) / sh,
+            "localPlayer": 1 if rect.get("LocalPlayer") else 0,
         })
     return summaries
 
@@ -160,22 +177,16 @@ def main():
         print(f"[{tag}] {filename}  (pixel: {rel_x},{rel_y} -> norm: {norm_x},{norm_y})")
 
     def on_click(event):
-        nonlocal screenshot_in_memory, clickcapture_mode
+        nonlocal screenshot_in_memory, summaries_in_memory, clickcapture_mode
         if not clickcapture_mode or screenshot_in_memory is None:
             return
         if not isinstance(event, mouse.ButtonEvent) or event.event_type != "up":
             return
 
-        # Get click position relative to game window
-        # sample values for abs_x, abs_y = (600, 400)
-        # sample values for gw x, y = (100, 230)
-        # rel_x = 600 - 100 = 500, where gw[x] is the left edge of the game window
-        # rel_y = 400 - 230 = 170, where gw[y] is the top edge of the game window
         abs_x, abs_y = pyautogui.position()
         rel_x = abs_x - gw["x"]
         rel_y = abs_y - gw["y"]
 
-        # Ignore clicks outside the game window
         if rel_x < 0 or rel_y < 0 or rel_x > gw["width"] or rel_y > gw["height"]:
             print("[click] Outside game window, ignored.")
             return
@@ -183,20 +194,26 @@ def main():
         norm_x = normalize_coord(rel_x, gw["width"])
         norm_y = normalize_coord(rel_y, gw["height"])
         timestamp = int(time.time())
+        stem = f"{timestamp}_{norm_x}_{norm_y}"
 
-        filename = f"{timestamp}_{norm_x}_{norm_y}.png"
-        filepath = output_folder / filename
+        json_path = output_folder / f"{stem}.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(summaries_in_memory, f, indent=2)
+        print(f"[saved] {json_path.name}  ({len(summaries_in_memory)} cards)")
+
+        filepath = output_folder / f"{stem}.png"
         do_save(screenshot_in_memory, filepath)
 
-        print(f"[saved] {filename}  (pixel: {rel_x},{rel_y} -> norm: {norm_x},{norm_y})")
+        print(f"[click] {filepath.name}  (pixel: {rel_x},{rel_y} -> norm: {norm_x},{norm_y})")
         clickcapture_mode = False
         screenshot_in_memory = None
+        summaries_in_memory = None
         print("[mode] CLICKSAVED — press capture key to take a new screenshot.")
 
     keyboard.on_press_key(capture_key, lambda _: on_capture())
     keyboard.on_press_key(virtual_click_key, lambda _: on_virtualclick())
     keyboard.on_press_key(debug_virtual_click_key, lambda _: on_virtualclick(is_debug=True))
-    # mouse.hook(on_click) # We will use keyboard shortcuts for virtual clicks instead of real mouse clicks to avoid issues with hover states and timing.
+    mouse.hook(on_click)
 
     print("Listening for events...")
     keyboard.wait("esc")

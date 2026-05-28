@@ -19,16 +19,20 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 
 MODE_TO_INDEX = {mode: i for i, mode in enumerate(MODES)}
 
-# Per-card features: [cost / COST_NORM, attack / ATTACK_NORM, is_unit].
-# Norms picked from setlite range (cost max 17, attack max 30) with some headroom.
-CARD_FEAT_DIM = 3
+# Per-card features:
+#   [cost/COST_NORM, attack/ATTACK_NORM, is_unit,
+#    topLeftX, topLeftY, width, height, localPlayer]
+# cost/attack norms picked from setlite range (cost max 17, attack max 30) with
+# some headroom. Spatial fields are pre-normalized in the sidecar JSON, so they
+# just pass through here.
+CARD_FEAT_DIM = 8
 CARD_EMBED_DIM = 16
 COST_NORM = 20.0
 ATTACK_NORM = 30.0
 
 
 def summaries_to_tensor(summaries):
-    """Convert a list of {cardCode, cost, attack, type} dicts to a (N, 3) tensor."""
+    """Convert a list of card-summary dicts (see fetch_card_summaries) to a (N, 8) tensor."""
     rows = []
     for c in summaries:
         cost = c.get("cost")
@@ -36,7 +40,12 @@ def summaries_to_tensor(summaries):
         rows.append([
             (0.0 if cost is None else float(cost)) / COST_NORM,
             (0.0 if attack is None else float(attack)) / ATTACK_NORM,
-            1.0 if c.get("type") == "Unit" else 0.0,
+            float(c.get("type") or 0),
+            float(c.get("topLeftX") or 0),
+            float(c.get("topLeftY") or 0),
+            float(c.get("width") or 0),
+            float(c.get("height") or 0),
+            float(c.get("localPlayer") or 0),
         ])
     if not rows:
         return torch.zeros((0, CARD_FEAT_DIM), dtype=torch.float32)
