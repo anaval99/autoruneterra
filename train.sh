@@ -1,0 +1,1 @@
+python modetrainer.py && python trainer.py;
