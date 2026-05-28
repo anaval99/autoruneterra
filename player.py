@@ -45,6 +45,10 @@ def infer(coord_model, mode_model, pil_image, device):
     if mode == "confirmation":
         # confirmation has a fixed hitbox — skip the regressor and aim at a known point inside
         pred_x, pred_y = 0.85, 0.50
+    elif mode == "prepare_battle":
+        pred_y = max(0.81, min(0.85, pred_y))
+    elif mode == "prepare_summon":
+        pred_y = max(0.95, min(0.99, pred_y))
     return pred_x, pred_y, mode
 
 
