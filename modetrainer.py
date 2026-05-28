@@ -135,9 +135,10 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
 
-    train_loader, val_loader = build_loaders("click_dataset_folder")
+    config = load_config()
+    train_loader, val_loader = build_loaders(config["output_folder"])
     print(f"train batches: {len(train_loader)}  val batches: {len(val_loader)}")
 
     model = build_model(num_classes=len(MODES)).to(device)
-    save_path = f"mode_{load_config()['model_name']}.pt"
+    save_path = f"mode_{config['model_name']}.pt"
     train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=10)
