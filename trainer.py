@@ -236,9 +236,9 @@ if __name__ == "__main__":
 
     config = load_config()
     input_size = (config["output_resolution"]["width"], config["output_resolution"]["height"])
-    train_loader, val_loader = build_loaders(config["output_folder"], input_size)
+    train_loader, val_loader = build_loaders(config["output_folder"], input_size, batch_size=16)
     print(f"train batches: {len(train_loader)}  val batches: {len(val_loader)}")
 
     model = build_model().to(device)
     save_path = f"{config['model_name']}.pt"
-    train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=10)
+    train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=20)
