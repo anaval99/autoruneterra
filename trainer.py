@@ -1,3 +1,4 @@
+import hashlib
 import json
 import random
 from pathlib import Path
@@ -7,7 +8,7 @@ from PIL import Image
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-from torchvision.models import ResNet50_Weights, resnet50
+from torchvision.models import ResNet18_Weights, resnet18
 from tqdm import tqdm
 
 from coord_to_mode import MODES, coord_to_mode
@@ -109,15 +110,32 @@ def _click_collate(batch):
     return images, cards, mask, modes, targets
 
 
+def group_split_by_image(files, val_frac, seed):
+    """Split files into train/val so duplicate screenshots stay on one side of the split.
+
+    Many samples in the dataset are near-identical screenshots (undo/redo during collection
+    produces repeated game states). A naive random split puts copies of the same screen in
+    both train and val, making val loss measure recall instead of generalization. Grouping
+    by image content hash before splitting keeps every duplicate of a given screen on the
+    same side.
+    """
+    groups = {}
+    for p in files:
+        h = hashlib.md5(p.read_bytes()).hexdigest()
+        groups.setdefault(h, []).append(p)
+    keys = list(groups.keys())
+    rng = random.Random(seed)
+    rng.shuffle(keys)
+    n_val_groups = int(len(keys) * val_frac)
+    val_files = [p for k in keys[:n_val_groups] for p in groups[k]]
+    train_files = [p for k in keys[n_val_groups:] for p in groups[k]]
+    return train_files, val_files
+
+
 def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
     """input_size is (width, height) — matches config.output_resolution."""
     files = [p for p in sorted(Path(folder).glob("*.png")) if p.with_suffix(".json").exists()]
-    rng = random.Random(seed)
-    rng.shuffle(files)
-
-    n_val = int(len(files) * val_frac)
-    val_files = files[:n_val]
-    train_files = files[n_val:]
+    train_files, val_files = group_split_by_image(files, val_frac, seed)
 
     transform = transforms.Compose(
         [
@@ -143,29 +161,39 @@ def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_
 
 #####  create model  ################################################################
 class CardEncoder(nn.Module):
-    """Permutation-invariant encoder: per-card MLP, then masked sum across cards."""
+    """Permutation-invariant encoder: project per-card features, then attend with a learned query.
 
-    def __init__(self, in_dim=CARD_FEAT_DIM, hidden=CARD_EMBED_DIM):
+    A sum-pool collapses every card into a single aggregate (preserves totals/counts but loses
+    per-card identity — "the 2-mana card is here" gets averaged away). A learned query attending
+    over the cards lets the encoder pick out specific cards by their features.
+    """
+
+    def __init__(self, in_dim=CARD_FEAT_DIM, hidden=CARD_EMBED_DIM, n_heads=2):
         super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(in_dim, hidden),
-            nn.ReLU(),
-            nn.Linear(hidden, hidden),
-        )
+        self.proj = nn.Linear(in_dim, hidden)
+        self.query = nn.Parameter(torch.randn(1, 1, hidden) * 0.02)
+        self.attn = nn.MultiheadAttention(hidden, num_heads=n_heads, batch_first=True)
         self.out_dim = hidden
 
     def forward(self, cards, mask):
-        # cards: (B, N, in_dim), mask: (B, N)
-        h = self.mlp(cards) * mask.unsqueeze(-1)
-        return h.sum(dim=1)
+        # cards: (B, N, in_dim), mask: (B, N) with 1 = real card, 0 = padding
+        h = self.proj(cards)
+        q = self.query.expand(h.size(0), -1, -1)
+        key_padding_mask = mask == 0
+        # If every position is padded (sample with no cards), MHA would NaN — disable the mask
+        # for those rows so attention runs over the zero-valued keys instead.
+        all_padded = key_padding_mask.all(dim=1, keepdim=True)
+        key_padding_mask = key_padding_mask & ~all_padded
+        out, _ = self.attn(q, h, h, key_padding_mask=key_padding_mask)
+        return out.squeeze(1)
 
 
 class ClickModel(nn.Module):
-    """ResNet-50 image features + card-set features + mode one-hot -> (x, y)."""
+    """ResNet-18 image features + card-set features + mode one-hot -> (x, y)."""
 
     def __init__(self, num_modes):
         super().__init__()
-        backbone = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        backbone = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         in_features = backbone.fc.in_features
         backbone.fc = nn.Identity()
         self.backbone = backbone
@@ -183,7 +211,7 @@ def build_model():
 
 
 #####  train model  ################################################################
-def train_model(model, train_loader, val_loader, device, save_path, epochs=10, lr=1e-4):
+def train_model(model, train_loader, val_loader, device, save_path, epochs=10, lr=1/10000):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
 

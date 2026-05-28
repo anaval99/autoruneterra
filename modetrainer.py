@@ -1,4 +1,3 @@
-import random
 from pathlib import Path
 
 import torch
@@ -6,12 +5,19 @@ from PIL import Image
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-from torchvision.models import ResNet50_Weights, resnet50
+from torchvision.models import ResNet18_Weights, resnet18
 from tqdm import tqdm
 
 from coord_to_mode import MODES, coord_to_mode
 from datacollector import load_config
-from trainer import CardEncoder, IMAGENET_MEAN, IMAGENET_STD, pad_cards, parse_card_json
+from trainer import (
+    CardEncoder,
+    IMAGENET_MEAN,
+    IMAGENET_STD,
+    group_split_by_image,
+    pad_cards,
+    parse_card_json,
+)
 
 MODE_TO_INDEX = {mode: i for i, mode in enumerate(MODES)}
 
@@ -50,12 +56,7 @@ def _mode_collate(batch):
 def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
     """input_size is (width, height) — matches config.output_resolution."""
     files = [p for p in sorted(Path(folder).glob("*.png")) if p.with_suffix(".json").exists()]
-    rng = random.Random(seed)
-    rng.shuffle(files)
-
-    n_val = int(len(files) * val_frac)
-    val_files = files[:n_val]
-    train_files = files[n_val:]
+    train_files, val_files = group_split_by_image(files, val_frac, seed)
 
     transform = transforms.Compose(
         [
@@ -81,11 +82,11 @@ def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_
 
 #####  create model  ################################################################
 class ModeModel(nn.Module):
-    """ResNet-50 image features + card-set features -> mode logits."""
+    """ResNet-18 image features + card-set features -> mode logits."""
 
     def __init__(self, num_classes):
         super().__init__()
-        backbone = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        backbone = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         in_features = backbone.fc.in_features
         backbone.fc = nn.Identity()
         self.backbone = backbone
