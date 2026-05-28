@@ -1,4 +1,3 @@
-import hashlib
 import json
 import random
 from pathlib import Path
@@ -110,32 +109,23 @@ def _click_collate(batch):
     return images, cards, mask, modes, targets
 
 
-def group_split_by_image(files, val_frac, seed):
-    """Split files into train/val so duplicate screenshots stay on one side of the split.
+def split_dataset_files(folder, val_frac=0.2, seed=42):
+    """Find all (png, json) pairs in `folder` and produce a deterministic train/val split.
 
-    Many samples in the dataset are near-identical screenshots (undo/redo during collection
-    produces repeated game states). A naive random split puts copies of the same screen in
-    both train and val, making val loss measure recall instead of generalization. Grouping
-    by image content hash before splitting keeps every duplicate of a given screen on the
-    same side.
+    Single source of truth for both trainer.py and modetrainer.py — calling this from both
+    keeps the coord regressor and mode classifier on matching train/val sides, so the mode
+    classifier can't be evaluated on samples the coord regressor has seen (or vice versa).
     """
-    groups = {}
-    for p in files:
-        h = hashlib.md5(p.read_bytes()).hexdigest()
-        groups.setdefault(h, []).append(p)
-    keys = list(groups.keys())
+    files = [p for p in sorted(Path(folder).glob("*.png")) if p.with_suffix(".json").exists()]
     rng = random.Random(seed)
-    rng.shuffle(keys)
-    n_val_groups = int(len(keys) * val_frac)
-    val_files = [p for k in keys[:n_val_groups] for p in groups[k]]
-    train_files = [p for k in keys[n_val_groups:] for p in groups[k]]
-    return train_files, val_files
+    rng.shuffle(files)
+    n_val = int(len(files) * val_frac)
+    return files[n_val:], files[:n_val]
 
 
 def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
     """input_size is (width, height) — matches config.output_resolution."""
-    files = [p for p in sorted(Path(folder).glob("*.png")) if p.with_suffix(".json").exists()]
-    train_files, val_files = group_split_by_image(files, val_frac, seed)
+    train_files, val_files = split_dataset_files(folder, val_frac, seed)
 
     transform = transforms.Compose(
         [

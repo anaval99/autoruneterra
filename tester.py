@@ -9,7 +9,12 @@ from torchvision import transforms
 from coord_to_mode import MODES, coord_to_mode
 from datacollector import load_config
 from modetrainer import build_model as build_mode_model
-from trainer import IMAGENET_MEAN, IMAGENET_STD, build_model as build_coord_model
+from trainer import (
+    IMAGENET_MEAN,
+    IMAGENET_STD,
+    build_model as build_coord_model,
+    parse_card_json,
+)
 
 
 def load_weights(model, weights_path, device):
@@ -29,26 +34,36 @@ def predict(coord_model, mode_model, image_path, device):
     image = Image.open(image_path).convert("RGB")
     tensor = transform(image).unsqueeze(0).to(device)
 
+    cards = parse_card_json(image_path.with_suffix(".json")).unsqueeze(0).to(device)
+    if cards.shape[1] == 0:
+        cards = torch.zeros((1, 1, cards.shape[2]), device=device)
+        card_mask = torch.zeros((1, 1), device=device)
+    else:
+        card_mask = torch.ones(cards.shape[:2], device=device)
+
     with torch.no_grad():
-        mode_idx = int(mode_model(tensor).argmax(1).item())
+        mode_idx = int(mode_model(tensor, cards, card_mask).argmax(1).item())
         mode_onehot = F.one_hot(
             torch.tensor([mode_idx], device=device), num_classes=len(MODES)
         ).float()
-        pred = coord_model(tensor, mode_onehot)[0]
+        pred = coord_model(tensor, cards, card_mask, mode_onehot)[0]
     return pred.cpu().tolist(), MODES[mode_idx]
 
 
 if __name__ == "__main__":
+    config = load_config()
+    default_folder = config["output_folder"]
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--name",
-        default="1778714661_83_49",
+        default=None,
         help="dataset filename without extension (e.g. 1778714661_83_49)",
     )
     parser.add_argument(
         "--folder",
-        default="click_dataset_folder",
-        help="folder containing the .png file",
+        default=default_folder,
+        help=f"folder containing the .png file (default: {default_folder})",
     )
     parser.add_argument(
         "--recent",
@@ -57,7 +72,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.recent:
+    if args.recent or args.name is None:
         folder = Path(args.folder)
         files = list(folder.glob("*.png"))
         if not files:
@@ -67,7 +82,7 @@ if __name__ == "__main__":
         image_path = Path(args.folder) / f"{args.name}.png"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_name = load_config()["model_name"]
+    model_name = config["model_name"]
     coord_model = load_weights(build_coord_model(), f"{model_name}.pt", device)
     mode_model = load_weights(
         build_mode_model(num_classes=len(MODES)), f"mode_{model_name}.pt", device

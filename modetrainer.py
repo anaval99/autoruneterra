@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import torch
 from PIL import Image
 from torch import nn
@@ -14,9 +12,9 @@ from trainer import (
     CardEncoder,
     IMAGENET_MEAN,
     IMAGENET_STD,
-    group_split_by_image,
     pad_cards,
     parse_card_json,
+    split_dataset_files,
 )
 
 MODE_TO_INDEX = {mode: i for i, mode in enumerate(MODES)}
@@ -55,8 +53,7 @@ def _mode_collate(batch):
 
 def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
     """input_size is (width, height) — matches config.output_resolution."""
-    files = [p for p in sorted(Path(folder).glob("*.png")) if p.with_suffix(".json").exists()]
-    train_files, val_files = group_split_by_image(files, val_frac, seed)
+    train_files, val_files = split_dataset_files(folder, val_frac, seed)
 
     transform = transforms.Compose(
         [

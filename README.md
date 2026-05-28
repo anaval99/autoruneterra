@@ -60,7 +60,7 @@ Each save produces a **pair** in `output_folder/`:
 
 ## Training
 
-The project trains two ResNet-50 fine-tunes that work together:
+The project trains two ResNet-18 fine-tunes that work together:
 
 - **Coord regressor** (`{model_name}.pt`) — predicts the normalized click target `(x, y)` from a screenshot, conditioned on the action mode. Trained by `trainer.py`.
 - **Mode classifier** (`mode_{model_name}.pt`) — predicts which action mode the screen is asking for. Trained by `modetrainer.py`.
@@ -74,7 +74,7 @@ Both read `model_name` from `config.json` (e.g. `darius` → `darius.pt`, `mode_
 
 Both models consume the same two inputs — the cropped screenshot and the sidecar card list — plus, for the regressor, the predicted mode:
 
-- The ResNet-50 backbone turns the image into a 2048-dim feature.
+- The ResNet-18 backbone turns the image into a 512-dim feature.
 - A small per-card MLP embeds each card's `[cost/20, attack/30, is_unit]` (where `is_unit` is `1` if `type == "Unit"`, else `0`); a masked sum across cards produces a fixed-size 16-dim "card-set" feature. This is permutation-invariant and handles variable card counts without padding to a fixed length.
 - The **mode classifier** head sees `[image_feat, card_feat]`.
 - The **coord regressor** head sees `[image_feat, card_feat, mode_onehot]` and outputs `(x, y)`.
