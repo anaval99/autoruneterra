@@ -14,7 +14,13 @@
     "model_name": "darius",
     "output_folder": "darius_dataset",
     "output_resolution": {
-        "width": 448,
-        "height": 448
+        "width": 200,
+        "height": 500
+    },
+    "crop_box": {
+        "left": 1564,
+        "top": 290,
+        "right": 1764,
+        "bottom": 796
     }
 }

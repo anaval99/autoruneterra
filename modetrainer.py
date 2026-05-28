@@ -38,7 +38,8 @@ class ModeDataset(Dataset):
         return image, target
 
 
-def build_loaders(folder, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
+def build_loaders(folder, input_size, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
+    """input_size is (width, height) — matches config.output_resolution."""
     files = sorted(Path(folder).glob("*.png"))
     rng = random.Random(seed)
     rng.shuffle(files)
@@ -49,6 +50,7 @@ def build_loaders(folder, batch_size=32, val_frac=0.2, seed=42, num_workers=0):
 
     transform = transforms.Compose(
         [
+            transforms.Resize((input_size[1], input_size[0])),  # torchvision expects (h, w)
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ]
@@ -136,7 +138,8 @@ if __name__ == "__main__":
     print(f"device: {device}")
 
     config = load_config()
-    train_loader, val_loader = build_loaders(config["output_folder"])
+    input_size = (config["output_resolution"]["width"], config["output_resolution"]["height"])
+    train_loader, val_loader = build_loaders(config["output_folder"], input_size)
     print(f"train batches: {len(train_loader)}  val batches: {len(val_loader)}")
 
     model = build_model(num_classes=len(MODES)).to(device)

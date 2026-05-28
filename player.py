@@ -12,8 +12,6 @@ from datacollector import capture_game_screenshot, find_game_window, load_config
 from modetrainer import build_model as build_mode_model
 from trainer import IMAGENET_MEAN, IMAGENET_STD, build_model as build_coord_model
 
-INPUT_SIZE = (448, 448)
-
 
 _transform = transforms.Compose(
     [
@@ -61,14 +59,14 @@ def normcoord_to_pixel(norm_x, norm_y, gw):
     return pixel_x, pixel_y
 
 
-def run_one_cycle(coord_model, mode_model, device, gw):
+def run_one_cycle(coord_model, mode_model, device, gw, input_size, crop_box):
     time.sleep(cycle_interval)  # to avoid too fast clicking, adjust as needed
 
     pyautogui.moveTo(gw["x"] + 1, gw["y"] + 1)
     time.sleep(cycle_interval)  # small delay to ensure mouse move is registered and any hover effects are cleared
 
     screenshot = capture_game_screenshot(gw)
-    screenshot = screenshot.resize(INPUT_SIZE)
+    screenshot = screenshot.crop(crop_box).resize(input_size)
     time.sleep(cycle_interval)  # small delay to ensure screenshot is captured properly
 
     pred_x, pred_y, mode = infer(coord_model, mode_model, screenshot, device)
@@ -89,6 +87,9 @@ def main():
     model_name = config["model_name"]
     coord_weights = f"{model_name}.pt"
     mode_weights = f"mode_{model_name}.pt"
+    input_size = (config["output_resolution"]["width"], config["output_resolution"]["height"])
+    cb = config["crop_box"]
+    crop_box = (cb["left"], cb["top"], cb["right"], cb["bottom"])
 
     gw = find_game_window(window_title)
     if not gw:
@@ -127,7 +128,7 @@ def main():
 
     while not stop.is_set():
         if running.is_set():
-            run_one_cycle(coord_model, mode_model, device, gw)
+            run_one_cycle(coord_model, mode_model, device, gw, input_size, crop_box)
         else:
             time.sleep(0.05)
 

@@ -86,6 +86,8 @@ def main():
     virtual_click_key = config["shortcuts"]["virtual_click_key"]
     debug_virtual_click_key = config["shortcuts"]["debug_virtual_click_key"]
     output_res = (config["output_resolution"]["width"], config["output_resolution"]["height"])
+    cb = config["crop_box"]
+    crop_box = (cb["left"], cb["top"], cb["right"], cb["bottom"])
     output_folder = Path(config["output_folder"])
     output_folder.mkdir(exist_ok=True)
     setlite = load_setlite()
@@ -115,7 +117,7 @@ def main():
         print("[capture] Screenshot stored. Click-capture mode ON.")
 
     def do_save(screenshot, filepath):
-        screenshot.resize(output_res).save(filepath)
+        screenshot.crop(crop_box).resize(output_res).save(filepath)
         print(f"[saved] {filepath.name}")
 
     def on_virtualclick(is_debug=False):
