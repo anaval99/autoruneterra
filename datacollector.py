@@ -2,6 +2,7 @@ import json
 import math
 import os
 import time
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -12,9 +13,40 @@ import pygetwindow
 from PIL import ImageGrab
 
 
+GAME_DATA_URL = "http://localhost:21337/positional-rectangles"
+
+
 def load_config(path="config.json"):
     with open(path, "r") as f:
         return json.load(f)
+
+
+def load_setlite(path="setlite.json"):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def fetch_card_summaries(setlite, timeout=2.0):
+    """Fetch live game state and return a list of {cardCode, cost, attack, type}.
+
+    Cards whose cardCode is not in setlite (e.g. "face") are skipped.
+    """
+    with urllib.request.urlopen(GAME_DATA_URL, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+
+    summaries = []
+    for rect in data.get("Rectangles", []):
+        code = rect.get("CardCode")
+        card = setlite.get(code)
+        if card is None:
+            continue
+        summaries.append({
+            "cardCode": code,
+            "cost": card.get("cost"),
+            "attack": card.get("attack"),
+            "type": card.get("type"),
+        })
+    return summaries
 
 
 def find_game_window(title):
@@ -56,6 +88,7 @@ def main():
     output_res = (config["output_resolution"]["width"], config["output_resolution"]["height"])
     output_folder = Path(config["output_folder"])
     output_folder.mkdir(exist_ok=True)
+    setlite = load_setlite()
 
     gw = find_game_window(window_title)
     if not gw:
@@ -104,6 +137,18 @@ def main():
 
         filename = f"{timestamp}_{norm_x}_{norm_y}.png"
         if not is_debug:
+            stem = f"{timestamp}_{norm_x}_{norm_y}"
+            try:
+                summaries = fetch_card_summaries(setlite)
+            except Exception as e:
+                print(f"[abort] Failed to fetch game data, image not saved: {e}")
+                return
+
+            json_path = output_folder / f"{stem}.json"
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(summaries, f, indent=2)
+            print(f"[saved] {json_path.name}  ({len(summaries)} cards)")
+
             filepath = output_folder / filename
             do_save(screenshot_in_memory, filepath)
 
@@ -147,7 +192,7 @@ def main():
     keyboard.on_press_key(capture_key, lambda _: on_capture())
     keyboard.on_press_key(virtual_click_key, lambda _: on_virtualclick())
     keyboard.on_press_key(debug_virtual_click_key, lambda _: on_virtualclick(is_debug=True))
-    mouse.hook(on_click)
+    # mouse.hook(on_click) # We will use keyboard shortcuts for virtual clicks instead of real mouse clicks to avoid issues with hover states and timing.
 
     print("Listening for events...")
     keyboard.wait("esc")
