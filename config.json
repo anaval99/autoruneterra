@@ -12,7 +12,7 @@
         "height": 1080
     },
     "model_name": "darius",
-    "output_folder": "click_dataset_folder",
+    "output_folder": "darius_dataset",
     "output_resolution": {
         "width": 448,
         "height": 448
