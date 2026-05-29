@@ -72,12 +72,13 @@ python modetrainer.py    # -> mode_{model_name}.pt
 
 Both read `model_name` from `config.json` (e.g. `darius` → `darius.pt`, `mode_darius.pt`).
 
-Both models consume the same two inputs — the cropped screenshot and the sidecar card list — plus, for the regressor, the predicted mode:
+Both models consume the same three inputs — the cropped screenshot, the sidecar card list, and the player's current mana — plus, for the regressor, the predicted mode:
 
 - The ResNet-18 backbone turns the image into a 512-dim feature.
 - A small per-card MLP embeds each card's `[cost/20, attack/30, is_unit]` (where `is_unit` is `1` if `type == "Unit"`, else `0`); a masked sum across cards produces a fixed-size 16-dim "card-set" feature. This is permutation-invariant and handles variable card counts without padding to a fixed length.
-- The **mode classifier** head sees `[image_feat, card_feat]`.
-- The **coord regressor** head sees `[image_feat, card_feat, mode_onehot]` and outputs `(x, y)`.
+- The current mana value is read off the screenshot with EasyOCR (see `get_manastone.py`) and passed in as a normalized scalar (`mana / 10`). Without this, the model can see each card's cost but has no signal for which ones are actually playable.
+- The **mode classifier** head sees `[image_feat, card_feat, mana]`.
+- The **coord regressor** head sees `[image_feat, card_feat, mana, mode_onehot]` and outputs `(x, y)`.
 
 At inference the mode classifier runs first and its prediction is fed into the regressor, so the coord head focuses on the right region of the screen.
 

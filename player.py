@@ -15,10 +15,12 @@ from datacollector import (
     load_config,
     load_setlite,
 )
+from get_manastone import get_manastone
 from modetrainer import build_model as build_mode_model
 from trainer import (
     IMAGENET_MEAN,
     IMAGENET_STD,
+    MANA_NORM,
     build_model as build_coord_model,
     summaries_to_tensor,
 )
@@ -40,19 +42,26 @@ def load_weights(model, weights_path, device):
 
 
 def infer(coord_model, mode_model, pil_image, summaries, device):
-    tensor = _transform(pil_image.convert("RGB")).unsqueeze(0).to(device)
+    rgb = pil_image.convert("RGB")
+    tensor = _transform(rgb).unsqueeze(0).to(device)
     cards = summaries_to_tensor(summaries).unsqueeze(0).to(device)  # (1, N, CARD_FEAT_DIM)
     if cards.shape[1] == 0:
         cards = torch.zeros((1, 1, cards.shape[2]), device=device)
         card_mask = torch.zeros((1, 1), device=device)
     else:
         card_mask = torch.ones(cards.shape[:2], device=device)
+
+    # OCR the already-cropped/resized screenshot — same format as training PNGs.
+    mana_val = get_manastone(rgb)
+    mana_scalar = min(max(mana_val or 0, 0), int(MANA_NORM)) / MANA_NORM
+    mana = torch.tensor([[mana_scalar]], dtype=torch.float32, device=device)
+
     with torch.no_grad():
-        mode_idx = int(mode_model(tensor, cards, card_mask).argmax(1).item())
+        mode_idx = int(mode_model(tensor, cards, card_mask, mana).argmax(1).item())
         mode_onehot = F.one_hot(
             torch.tensor([mode_idx], device=device), num_classes=len(MODES)
         ).float()
-        pred = coord_model(tensor, cards, card_mask, mode_onehot)[0]
+        pred = coord_model(tensor, cards, card_mask, mana, mode_onehot)[0]
     pred_x, pred_y = pred.cpu().tolist()
     pred_x = max(0.0, min(1.0, pred_x))
     pred_y = max(0.0, min(1.0, pred_y))
@@ -64,7 +73,7 @@ def infer(coord_model, mode_model, pil_image, summaries, device):
         pred_y = max(0.81, min(0.85, pred_y))
     elif mode == "prepare_summon":
         pred_y = max(0.95, min(0.99, pred_y))
-    return pred_x, pred_y, mode
+    return pred_x, pred_y, mode, mana_val
 
 
 cycle_interval = 0.5
@@ -92,7 +101,7 @@ def run_one_cycle(coord_model, mode_model, device, gw, input_size, crop_box, set
     screenshot = screenshot.crop(crop_box).resize(input_size)
     time.sleep(cycle_interval)  # small delay to ensure screenshot is captured properly
 
-    pred_x, pred_y, mode = infer(coord_model, mode_model, screenshot, summaries, device)
+    pred_x, pred_y, mode, mana = infer(coord_model, mode_model, screenshot, summaries, device)
     click_x, click_y = normcoord_to_pixel(pred_x, pred_y, gw)
     pyautogui.moveTo(click_x, click_y)
 
@@ -100,7 +109,7 @@ def run_one_cycle(coord_model, mode_model, device, gw, input_size, crop_box, set
     pyautogui.click()
 
     print(
-        f"[player] mode={mode}  pred=({pred_x:.3f},{pred_y:.3f})  click=({click_x},{click_y})"
+        f"[player] mode={mode}  mana={mana}  pred=({pred_x:.3f},{pred_y:.3f})  click=({click_x},{click_y})"
     )
 
 
@@ -129,6 +138,9 @@ def main():
         build_mode_model(num_classes=len(MODES)), mode_weights, device
     )
     print(f"[player] models loaded.")
+    print(f"[player] warming up OCR...")
+    from PIL import Image as _PILImage
+    get_manastone(_PILImage.new("RGB", input_size))
     print(f"[player] game window: {gw['width']}x{gw['height']} at ({gw['x']},{gw['y']})")
 
     running = threading.Event()

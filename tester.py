@@ -8,10 +8,12 @@ from torchvision import transforms
 
 from coord_to_mode import MODES, coord_to_mode
 from datacollector import load_config
+from get_manastone import get_manastone
 from modetrainer import build_model as build_mode_model
 from trainer import (
     IMAGENET_MEAN,
     IMAGENET_STD,
+    MANA_NORM,
     build_model as build_coord_model,
     parse_card_json,
 )
@@ -41,13 +43,17 @@ def predict(coord_model, mode_model, image_path, device):
     else:
         card_mask = torch.ones(cards.shape[:2], device=device)
 
+    mana_val = get_manastone(image)
+    mana_scalar = min(max(mana_val or 0, 0), int(MANA_NORM)) / MANA_NORM
+    mana = torch.tensor([[mana_scalar]], dtype=torch.float32, device=device)
+
     with torch.no_grad():
-        mode_idx = int(mode_model(tensor, cards, card_mask).argmax(1).item())
+        mode_idx = int(mode_model(tensor, cards, card_mask, mana).argmax(1).item())
         mode_onehot = F.one_hot(
             torch.tensor([mode_idx], device=device), num_classes=len(MODES)
         ).float()
-        pred = coord_model(tensor, cards, card_mask, mode_onehot)[0]
-    return pred.cpu().tolist(), MODES[mode_idx]
+        pred = coord_model(tensor, cards, card_mask, mana, mode_onehot)[0]
+    return pred.cpu().tolist(), MODES[mode_idx], mana_val
 
 
 if __name__ == "__main__":
@@ -88,7 +94,7 @@ if __name__ == "__main__":
         build_mode_model(num_classes=len(MODES)), f"mode_{model_name}.pt", device
     )
 
-    (pred_x, pred_y), pred_mode = predict(coord_model, mode_model, image_path, device)
+    (pred_x, pred_y), pred_mode, mana_val = predict(coord_model, mode_model, image_path, device)
 
     # ground truth from filename: {timestamp}_{x}_{y}.png  (x,y are 0..100)
     _, x_str, y_str = image_path.stem.split("_")
@@ -96,6 +102,7 @@ if __name__ == "__main__":
     true_mode = coord_to_mode(int(x_str), int(y_str))
 
     print(f"file: {image_path.name}")
+    print(f"  mana      (ocr):  {mana_val}")
     print(f"  mode      (pred / actual): {pred_mode} / {true_mode}")
     print(f"  predicted (norm): ({pred_x:.3f}, {pred_y:.3f})")
     print(f"  actual    (norm): ({true_x:.3f}, {true_y:.3f})")

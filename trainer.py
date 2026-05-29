@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from coord_to_mode import MODES, coord_to_mode
 from datacollector import load_config
+from get_manastone import get_manastones
 
 #####  load data  ################################################################
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -29,6 +30,9 @@ CARD_FEAT_DIM = 8
 CARD_EMBED_DIM = 16
 COST_NORM = 20.0
 ATTACK_NORM = 30.0
+# LoR base mana caps at 10; clamp+normalize so OCR misreads (e.g. 11+) don't
+# blow up the feature. None -> 0 (OCR failure treated as "no info").
+MANA_NORM = 10.0
 
 
 def summaries_to_tensor(summaries):
@@ -93,20 +97,25 @@ class ClickDataset(Dataset):
         mode_onehot = torch.zeros(len(MODES), dtype=torch.float32)
         mode_onehot[MODE_TO_INDEX[mode]] = 1.0
 
-        image = Image.open(path).convert("RGB")
-        if self.transform is not None:
-            image = self.transform(image)
+        raw = Image.open(path).convert("RGB")
+        image = self.transform(raw) if self.transform is not None else raw
 
         cards = parse_card_json(path.with_suffix(".json"))
-        return image, cards, mode_onehot, target
+        return image, raw, cards, mode_onehot, target
 
 
 def _click_collate(batch):
     images = torch.stack([b[0] for b in batch])
-    cards, mask = pad_cards([b[1] for b in batch])
-    modes = torch.stack([b[2] for b in batch])
-    targets = torch.stack([b[3] for b in batch])
-    return images, cards, mask, modes, targets
+    raws = [b[1] for b in batch]
+    cards, mask = pad_cards([b[2] for b in batch])
+    modes = torch.stack([b[3] for b in batch])
+    targets = torch.stack([b[4] for b in batch])
+    mana_vals = get_manastones(raws)
+    mana = torch.tensor(
+        [min(max(m or 0, 0), int(MANA_NORM)) / MANA_NORM for m in mana_vals],
+        dtype=torch.float32,
+    ).unsqueeze(1)
+    return images, cards, mask, modes, mana, targets
 
 
 def split_dataset_files(folder, val_frac=0.2, seed=42):
@@ -179,7 +188,7 @@ class CardEncoder(nn.Module):
 
 
 class ClickModel(nn.Module):
-    """ResNet-18 image features + card-set features + mode one-hot -> (x, y)."""
+    """ResNet-18 image features + card-set features + mana + mode one-hot -> (x, y)."""
 
     def __init__(self, num_modes):
         super().__init__()
@@ -188,12 +197,12 @@ class ClickModel(nn.Module):
         backbone.fc = nn.Identity()
         self.backbone = backbone
         self.card_encoder = CardEncoder()
-        self.head = nn.Linear(in_features + self.card_encoder.out_dim + num_modes, 2)
+        self.head = nn.Linear(in_features + self.card_encoder.out_dim + 1 + num_modes, 2)
 
-    def forward(self, image, cards, card_mask, mode_onehot):
+    def forward(self, image, cards, card_mask, mana, mode_onehot):
         img_feat = self.backbone(image)
         card_feat = self.card_encoder(cards, card_mask)
-        return self.head(torch.cat([img_feat, card_feat, mode_onehot], dim=1))
+        return self.head(torch.cat([img_feat, card_feat, mana, mode_onehot], dim=1))
 
 
 def build_model():
@@ -210,14 +219,15 @@ def train_model(model, train_loader, val_loader, device, save_path, epochs=10, l
         model.train()
         train_loss = 0.0
         pbar = tqdm(train_loader, desc=f"epoch {epoch:>2}/{epochs}", leave=False)
-        for images, cards, card_mask, modes, targets in pbar:
+        for images, cards, card_mask, modes, mana, targets in pbar:
             images = images.to(device)
             cards = cards.to(device)
             card_mask = card_mask.to(device)
             modes = modes.to(device)
+            mana = mana.to(device)
             targets = targets.to(device)
 
-            preds = model(images, cards, card_mask, modes)
+            preds = model(images, cards, card_mask, mana, modes)
             loss = criterion(preds, targets)
 
             optimizer.zero_grad()
@@ -232,13 +242,14 @@ def train_model(model, train_loader, val_loader, device, save_path, epochs=10, l
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for images, cards, card_mask, modes, targets in tqdm(val_loader, desc="  validating", leave=False):
+            for images, cards, card_mask, modes, mana, targets in tqdm(val_loader, desc="  validating", leave=False):
                 images = images.to(device)
                 cards = cards.to(device)
                 card_mask = card_mask.to(device)
                 modes = modes.to(device)
+                mana = mana.to(device)
                 targets = targets.to(device)
-                preds = model(images, cards, card_mask, modes)
+                preds = model(images, cards, card_mask, mana, modes)
                 loss = criterion(preds, targets)
                 val_loss += loss.item() * images.size(0)
         val_loss /= len(val_loader.dataset)

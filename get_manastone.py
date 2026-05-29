@@ -37,35 +37,42 @@ def _resolve_path(filename):
     return filename if os.path.isabs(filename) else os.path.join("darius_dataset", filename)
 
 
-def get_manastone(filename="1780002947_53_95.png"):
-    img = Image.open(_resolve_path(filename)).convert("RGB")
+def get_manastone(source="1780002947_53_95.png"):
+    """source may be a filename (str/Path) or a PIL.Image."""
+    if isinstance(source, Image.Image):
+        img = source if source.mode == "RGB" else source.convert("RGB")
+    else:
+        img = Image.open(_resolve_path(str(source))).convert("RGB")
     return _ocr_crop(_get_reader(), img)
 
 
-def get_manastones(filenames, batch_size=32):
+def get_manastones(inputs, batch_size=32):
     """
-    Batch read mana values for a list of image filenames.
+    Batch read mana values for a list of inputs (filenames OR PIL.Image objects).
     Returns a list of ints (or None where OCR failed), aligned with input order.
 
     Stacks all crops into one tall image and uses easyocr's recognize() with
     multiple regions, so the underlying recognizer runs them as a real batched
     forward pass instead of N sequential calls.
     """
-    if not filenames:
+    if not inputs:
         return []
 
     reader = _get_reader()
 
     crops_grey = []
-    for f in filenames:
-        img = Image.open(_resolve_path(f)).convert("RGB")
+    for inp in inputs:
+        if isinstance(inp, Image.Image):
+            img = inp if inp.mode == "RGB" else inp.convert("RGB")
+        else:
+            img = Image.open(_resolve_path(str(inp))).convert("RGB")
         crop = img.crop(MANA_CROP_BOX)
         crop = crop.resize((crop.width * UPSCALE, crop.height * UPSCALE), Image.LANCZOS)
         crops_grey.append(np.array(crop.convert("L")))
 
     h, w = crops_grey[0].shape
     stacked = np.vstack(crops_grey)
-    horizontal_list = [[0, w, i * h, (i + 1) * h] for i in range(len(filenames))]
+    horizontal_list = [[0, w, i * h, (i + 1) * h] for i in range(len(inputs))]
 
     results = reader.recognize(
         stacked,
