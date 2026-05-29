@@ -201,7 +201,7 @@ def build_model():
 
 
 #####  train model  ################################################################
-def train_model(model, train_loader, val_loader, device, save_path, epochs=10, lr=1/10000):
+def train_model(model, train_loader, val_loader, device, save_path, epochs=10, lr=1/30000):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
 
