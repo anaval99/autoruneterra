@@ -19,24 +19,71 @@ def _get_reader():
     global _reader
     if _reader is None:
         import easyocr
-        _reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+        _reader = easyocr.Reader(["en"], gpu=True, verbose=False)
     return _reader
 
 
-def get_manastone(filename="1780002947_53_95.png"):
-    path = filename if os.path.isabs(filename) else os.path.join("darius_dataset", filename)
-    img = Image.open(path).convert("RGB")
-
+def _ocr_crop(reader, img):
     crop = img.crop(MANA_CROP_BOX)
     crop = crop.resize((crop.width * UPSCALE, crop.height * UPSCALE), Image.LANCZOS)
-
-    reader = _get_reader()
     results = reader.readtext(np.array(crop), allowlist="0123456789", detail=0)
-
     if not results:
         return None
     digits = "".join(r for r in results if r.isdigit())
     return int(digits) if digits else None
+
+
+def _resolve_path(filename):
+    return filename if os.path.isabs(filename) else os.path.join("darius_dataset", filename)
+
+
+def get_manastone(filename="1780002947_53_95.png"):
+    img = Image.open(_resolve_path(filename)).convert("RGB")
+    return _ocr_crop(_get_reader(), img)
+
+
+def get_manastones(filenames, batch_size=32):
+    """
+    Batch read mana values for a list of image filenames.
+    Returns a list of ints (or None where OCR failed), aligned with input order.
+
+    Stacks all crops into one tall image and uses easyocr's recognize() with
+    multiple regions, so the underlying recognizer runs them as a real batched
+    forward pass instead of N sequential calls.
+    """
+    if not filenames:
+        return []
+
+    reader = _get_reader()
+
+    crops_grey = []
+    for f in filenames:
+        img = Image.open(_resolve_path(f)).convert("RGB")
+        crop = img.crop(MANA_CROP_BOX)
+        crop = crop.resize((crop.width * UPSCALE, crop.height * UPSCALE), Image.LANCZOS)
+        crops_grey.append(np.array(crop.convert("L")))
+
+    h, w = crops_grey[0].shape
+    stacked = np.vstack(crops_grey)
+    horizontal_list = [[0, w, i * h, (i + 1) * h] for i in range(len(filenames))]
+
+    results = reader.recognize(
+        stacked,
+        horizontal_list=horizontal_list,
+        free_list=[],
+        allowlist="0123456789",
+        detail=0,
+        batch_size=batch_size,
+    )
+
+    out = []
+    for r in results:
+        if not r:
+            out.append(None)
+            continue
+        digits = "".join(c for c in r if c.isdigit())
+        out.append(int(digits) if digits else None)
+    return out
 
 
 if __name__ == "__main__":
