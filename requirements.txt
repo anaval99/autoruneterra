@@ -4,3 +4,4 @@ pyautogui
 pygetwindow
 Pillow
 tqdm
+easyocr
