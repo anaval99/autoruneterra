@@ -1,0 +1,3 @@
+LR = 1 / 6000
+EPOCHS = 10
+BATCH_SIZE = 30

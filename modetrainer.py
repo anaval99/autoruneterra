@@ -9,6 +9,7 @@ from tqdm import tqdm
 from coord_to_mode import MODES, coord_to_mode
 from datacollector import load_config
 from get_manastone import get_manastones
+from hyperparams import BATCH_SIZE, EPOCHS, LR
 from trainer import (
     CardEncoder,
     IMAGENET_MEAN,
@@ -171,9 +172,9 @@ if __name__ == "__main__":
 
     config = load_config()
     input_size = (config["output_resolution"]["width"], config["output_resolution"]["height"])
-    train_loader, val_loader = build_loaders(config["output_folder"], input_size)
+    train_loader, val_loader = build_loaders(config["output_folder"], input_size, BATCH_SIZE)
     print(f"train batches: {len(train_loader)}  val batches: {len(val_loader)}")
 
     model = build_model(num_classes=len(MODES)).to(device)
     save_path = f"mode_{config['model_name']}.pt"
-    train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=10)
+    train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=EPOCHS, lr=LR)

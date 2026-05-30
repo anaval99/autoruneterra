@@ -1,0 +1,98 @@
+[
+  {
+    "cardCode": "face",
+    "name": null,
+    "cost": 0,
+    "attack": 0,
+    "type": 0,
+    "topLeftX": 0.09322916666666667,
+    "topLeftY": 0.5546296296296296,
+    "width": 0.0609375,
+    "height": 0.10833333333333334,
+    "localPlayer": 1
+  },
+  {
+    "cardCode": "face",
+    "name": null,
+    "cost": 0,
+    "attack": 0,
+    "type": 0,
+    "topLeftX": 0.09322916666666667,
+    "topLeftY": 0.337037037037037,
+    "width": 0.0609375,
+    "height": 0.10833333333333334,
+    "localPlayer": 0
+  },
+  {
+    "cardCode": "01NX034",
+    "name": "Affectionate Poro",
+    "cost": 1,
+    "attack": 1,
+    "type": 1,
+    "topLeftX": 0.2791666666666667,
+    "topLeftY": 0.9259259259259259,
+    "width": 0.09114583333333333,
+    "height": 0.22685185185185186,
+    "localPlayer": 1
+  },
+  {
+    "cardCode": "02NX005",
+    "name": "Iron Ballista",
+    "cost": 3,
+    "attack": 4,
+    "type": 1,
+    "topLeftX": 0.4666666666666667,
+    "topLeftY": 0.7592592592592593,
+    "width": 0.06614583333333333,
+    "height": 0.14814814814814814,
+    "localPlayer": 1
+  },
+  {
+    "cardCode": "03MT035",
+    "name": "Pale Cascade",
+    "cost": 2,
+    "attack": 0,
+    "type": 0,
+    "topLeftX": 0.36614583333333334,
+    "topLeftY": 0.9212962962962963,
+    "width": 0.09166666666666666,
+    "height": 0.22777777777777777,
+    "localPlayer": 1
+  },
+  {
+    "cardCode": "03MT075",
+    "name": "Lunari Priestess",
+    "cost": 3,
+    "attack": 2,
+    "type": 1,
+    "topLeftX": 0.45364583333333336,
+    "topLeftY": 0.9212962962962963,
+    "width": 0.0921875,
+    "height": 0.22870370370370371,
+    "localPlayer": 1
+  },
+  {
+    "cardCode": "01NX038",
+    "name": "Darius",
+    "cost": 6,
+    "attack": 6,
+    "type": 1,
+    "topLeftX": 0.5416666666666666,
+    "topLeftY": 0.925,
+    "width": 0.09270833333333334,
+    "height": 0.22962962962962963,
+    "localPlayer": 1
+  },
+  {
+    "cardCode": "04NX010",
+    "name": "Thorn of the Rose",
+    "cost": 3,
+    "attack": 5,
+    "type": 1,
+    "topLeftX": 0.6307291666666667,
+    "topLeftY": 0.9333333333333333,
+    "width": 0.09270833333333334,
+    "height": 0.23055555555555557,
+    "localPlayer": 1
+  }
+]

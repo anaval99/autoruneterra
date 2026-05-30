@@ -13,6 +13,7 @@ from tqdm import tqdm
 from coord_to_mode import MODES, coord_to_mode
 from datacollector import load_config
 from get_manastone import get_manastones
+from hyperparams import BATCH_SIZE, EPOCHS, LR
 
 #####  load data  ################################################################
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -265,9 +266,9 @@ if __name__ == "__main__":
 
     config = load_config()
     input_size = (config["output_resolution"]["width"], config["output_resolution"]["height"])
-    train_loader, val_loader = build_loaders(config["output_folder"], input_size, batch_size=16)
+    train_loader, val_loader = build_loaders(config["output_folder"], input_size, batch_size=BATCH_SIZE)
     print(f"train batches: {len(train_loader)}  val batches: {len(val_loader)}")
 
     model = build_model().to(device)
     save_path = f"{config['model_name']}.pt"
-    train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=20)
+    train_model(model, train_loader, val_loader, device, save_path=save_path, epochs=EPOCHS, lr=LR)
